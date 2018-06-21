@@ -25,8 +25,6 @@
 
 using namespace boost::multiprecision;
 
-class Node;
-
 enum class Timeout
 {
     /* The time (in seconds) after which a key / value pair expires;
@@ -73,6 +71,11 @@ public:
         }
     }
 
+    size_t Size() const
+    {
+        return contacts_.size();
+    }
+
     const uint256_t& CoveredDistanceFrom() const
     {
         return covered_distance_from_;
@@ -85,60 +88,67 @@ public:
 
     friend std::ostream& operator<<(std::ostream& os, const Bucket& bucket)
     {
-        for (auto bucket: bucket.contacts_)
+        for (auto contact: bucket.contacts_)
         {
-            os << bucket << "\n";
+            os << contact << "\n";
         }
 
         return os;
     }
 };
 
-class BucketList
-{
-    enum { SHA1_HASH_SIZE = 160 };
-    std::list<Bucket> bucket_list_;
-public:
-    explicit BucketList()
-    {
-        for(auto index = 0; index < SHA1_HASH_SIZE; ++index)
-        {
-            auto covered_distance_from = pow(cpp_dec_float_100(2), cpp_dec_float_100(index));
-            auto covered_distance_to = pow(cpp_dec_float_100(2), cpp_dec_float_100(index + 1));
-
-            Bucket bucket(static_cast<uint256_t>(covered_distance_from),
-                          static_cast<uint256_t>(covered_distance_to));
-
-            bucket_list_.push_back(bucket);
-        }
-
-#ifdef DEBUG
-        std::cout << "Level\tIDs\tCovered Distance\n";
-        auto index = 0;
-
-        for(auto bucket: bucket_list_)
-        {
-            std::cout << "#"    << index++
-                      << "\t"   << rand() % 20
-                      << "\t["  << bucket.CoveredDistanceFrom()
-                      << ", "   << bucket.CoveredDistanceTo()
-                      << ")"
-                      << std::endl;
-        }
-#endif
-    }
-
-    void Push(const Node& other_node, const uint256_t& distance)
-    {
-        cpp_dec_float_100 d(distance);
-        d += 4;
-
-        std::cout << "Level: " << static_cast<uint32_t>(log2(d)) << " -- " << log2(d) << std::endl;
-    }
-};
-
 class Node
 {
+    class BucketList
+    {
+        enum { SHA1_HASH_SIZE = 160 };
+        std::vector<Bucket> bucket_list_;
+    public:
+        explicit BucketList()
+        {
+            for(auto index = 0; index < SHA1_HASH_SIZE; ++index)
+            {
+                auto covered_distance_from = pow(cpp_dec_float_100(2), cpp_dec_float_100(index));
+                auto covered_distance_to = pow(cpp_dec_float_100(2), cpp_dec_float_100(index + 1));
+
+                Bucket bucket(static_cast<uint256_t>(covered_distance_from),
+                              static_cast<uint256_t>(covered_distance_to));
+
+                bucket_list_.push_back(bucket);
+            }
+
+    #ifdef DEBUG
+            std::cout << "Level\tIDs\tCovered Distance\n";
+            auto index = 0;
+
+            for(auto bucket: bucket_list_)
+            {
+                std::cout << "#"    << index++
+                          << "\t"   << rand() % 20
+                          << "\t["  << bucket.CoveredDistanceFrom()
+                          << ", "   << bucket.CoveredDistanceTo()
+                          << ")"
+                          << std::endl;
+            }
+    #endif
+        }
+
+        void Push(const Node& other_node, const uint256_t& distance)
+        {
+            cpp_dec_float_100 d(distance);
+
+            auto level = static_cast<uint32_t>(log2(d) + 0.0000000001);
+            bucket_list_[level].Put(other_node.GetID());
+
+            std::cout << "Node has been added to level ["
+                      << level
+                      << "]: "
+                      << std::hex
+                      << bucket_list_[level]
+                      << std::endl;
+        }
+    };
+
     /* Size in bits of the key used to identity node and store and retreive data;
      * in basic Kademlia this is 160, the length of an SHA1 digest (hash).
      * First 96 bits will not be used. */
@@ -203,6 +213,8 @@ public:
     void AddToList(const Node& other_node)
     {
         auto distance { CalculateDistance(other_node) };
+        // Test
+        distance += 1;
         bucket_list_.get()->Push(other_node, distance);
     }
 
@@ -214,13 +226,8 @@ public:
 
 int main()
 {
-    Node node1 { "The quick brown fox jumps over the lazy dog" };
-    Node node2 { "The quick brown fox jumps over the lazy dog" };
+    Node node1 { "A" };
+    Node node2 { "A" };
 
     node1.AddToList(node2);
-
-    //std::cout << "[Node 1]:\t"      << std::hex << node1.GetID()
-    //          << "\n[Node 2]:\t"    << std::hex << node2.GetID()
-    //          << "\n[Distance]:\t"  << distance
-    //          << std::endl;
 }
